@@ -1,12 +1,11 @@
-# main_scheduler.py (FINAL Multi-Asset H4 Version)
-
 import configparser
 import json
 from datetime import datetime
 import time
 import pytz
 
-# Import all services
+from apscheduler.schedulers.blocking import BlockingScheduler
+
 from services.data_service import DataService
 from services.indicator_service import IndicatorService
 from services.ml_service import MLService
@@ -16,28 +15,24 @@ from services.trade_logger import TradeLogger
 from services.trade_manager import TradeManagerService
 
 def run_trade_cycle_for_symbol(config, symbol: str):
-    """
-    Runs the complete H4 Swing signal generation pipeline for a single symbol.
-    """
     strategy_name = f"H4 Swing ({symbol})"
     print(f"\n[{datetime.now()}] --- Running {strategy_name} Cycle ---")
     
-    # Create filenames specific to this symbol
     safe_symbol_name = symbol.replace('/', '_').lower()
     status_file = f"{safe_symbol_name}_status.json"
     log_file = f"{safe_symbol_name}_log.csv"
     model_file = f"models/{safe_symbol_name}_h4.pkl"
 
-    # Initialize services needed for signal generation
     data_svc = DataService(api_key=config['exchange']['api_key'], api_secret=config['exchange']['api_secret'])
     telegram_svc = TelegramService(bot_token=config['telegram']['bot_token'], channel_id=config['telegram']['channel_id'])
     
-    # Read status to see if we can hunt for a new trade
+    trade_manager = TradeManagerService(data_svc, telegram_svc, log_file, status_file, symbol)
+    trade_manager.check_open_trade()
+
     try:
         with open(status_file, 'r') as f:
             status = json.load(f)
     except FileNotFoundError:
-        # If the file doesn't exist, create it.
         with open(status_file, 'w') as f:
             json.dump({"is_trade_open": False, "current_trade": {}}, f, indent=2)
         status = {"is_trade_open": False}
@@ -46,7 +41,6 @@ def run_trade_cycle_for_symbol(config, symbol: str):
         print(f"{strategy_name}: A trade is already open. Skipping new signal analysis.")
         return
 
-    # Hunt for a new trade
     print(f"{strategy_name}: No open trade. Proceeding with analysis.")
     indicator_svc = IndicatorService()
     ml_svc = MLService(model_path=model_file)
@@ -68,7 +62,13 @@ def run_trade_cycle_for_symbol(config, symbol: str):
         print(f"{strategy_name}: No valid signal found. Reason: {result['status']}")
         telegram_svc.send_market_update(result['status'], result.get('reason'))
 
-# --- The Main Execution Block ---
+
+def run_daily_recap(config):
+    print("\n" + "="*50)
+    print(f"[{datetime.now()}] --- Daily Recap is currently disabled ---")
+    print("="*50)
+
+
 if __name__ == '__main__':
     config = configparser.ConfigParser()
     config.read('config.ini')
@@ -77,45 +77,39 @@ if __name__ == '__main__':
         print("FATAL ERROR: Please set your Telegram bot token in config.ini before running.")
         exit()
 
-    # Get the list of symbols from the config file
     symbols_to_trade = [symbol.strip() for symbol in config['parameters']['symbols'].split(',')]
     
-    # Initialize Core Services that are always needed
-    data_svc = DataService(api_key=config['exchange']['api_key'], api_secret=config['exchange']['api_secret'])
-    telegram_svc = TelegramService(bot_token=config['telegram']['bot_token'], channel_id=config['telegram']['channel_id'])
-
-    # Create a list of Trade Managers, one for each symbol
-    trade_managers = [
-        TradeManagerService(data_svc, telegram_svc, f"{s.replace('/', '_').lower()}_log.csv", f"{s.replace('/', '_').lower()}_status.json", s)
-        for s in symbols_to_trade
-    ]
+    print("\n" + "="*50)
+    print("--- Running the first cycle manually for all strategies on startup ---")
+    print("="*50)
     
-    print(f"--- High-Frequency, Multi-Asset Bot Started for: {symbols_to_trade} ---")
-    print("Trade management will run every minute.")
-    print("Signal generation will run on H4 candle closes.")
-    print("Press Ctrl+C to exit.")
+    for symbol in symbols_to_trade:
+        run_trade_cycle_for_symbol(config, symbol)
 
-    last_h4_run_hour = -1
-
+    print("\n" + "="*50)
+    print("--- First manual cycle finished ---")
+    print("="*50)
+    
+    print("\n--- Initializing Market-Aware Scheduler for all future cycles ---")
+    scheduler = BlockingScheduler(timezone="UTC")
+    
+    # Create a separate job for each symbol
+    for symbol in symbols_to_trade:
+        safe_symbol_name = symbol.replace('/', '_').lower()
+        scheduler.add_job(
+            run_trade_cycle_for_symbol, 
+            'cron', 
+            hour='0,4,8,12,16,20', 
+            minute=1, 
+            args=[config, symbol],
+            id=f'swing_{safe_symbol_name}'
+        )
+    
+    print("\nMarket-Aware Bot Scheduler Started:")
+    print("  - H4 Swing Bot for all symbols will run on the 4-hour marks.")
+    print("The bot is now running. Press Ctrl+C to exit.")
+    
     try:
-        while True:
-            now_utc = datetime.now(pytz.utc)
-            current_hour = now_utc.hour
-            current_minute = now_utc.minute
-            
-            # --- 1. HIGH-FREQUENCY TRADE MANAGEMENT (Runs every minute) ---
-            print(f"[{now_utc.strftime('%Y-%m-%d %H:%M:%S')}] Checking open trades for all symbols...")
-            for manager in trade_managers:
-                manager.check_open_trade()
-            
-            # --- 2. SIGNAL GENERATION (Runs only at H4 candle close times) ---
-            if current_hour % 4 == 0 and current_minute >= 1 and last_h4_run_hour != current_hour:
-                for symbol in symbols_to_trade:
-                    run_trade_cycle_for_symbol(config, symbol)
-                last_h4_run_hour = current_hour
-
-            # Wait for 1 minute before the next loop
-            time.sleep(60)
-
+        scheduler.start()
     except (KeyboardInterrupt, SystemExit):
-        print("\nBot stopped.")
+        print("Scheduler stopped.")

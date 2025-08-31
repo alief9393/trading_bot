@@ -1,4 +1,12 @@
 {
-  "is_trade_open": false,
-  "current_trade": {}
+  "is_trade_open": true,
+  "current_trade": {
+    "decision": "SELL",
+    "entry": 111072.94,
+    "sl": 113919.74,
+    "tp1": 108226.14,
+    "tp2": 105379.34,
+    "tp3": 102532.54,
+    "rationale": "Signal confirmed by market structure and momentum indicators."
+  }
 }
