@@ -39,7 +39,7 @@ class MLService:
         features_for_model = latest_data[self.feature_names]
         
         # --- NEW: Get probabilities instead of just the final prediction ---
-        probabilities = self.model.predict_proba(features_for_model)[0]
+        probabilities = self.model.predict(features_for_model)[0]
         # The output is an array like [prob_HOLD, prob_BUY, prob_SELL]
         # Example: [0.2, 0.7, 0.1]
         # -----------------------------------------------------------

@@ -21,7 +21,7 @@ class DataService:
             print(f"DataService: Error initializing Binance.US client: {e}")
             self.client = None
 
-    def get_market_data(self, symbol: str, timeframe: str, limit: int = 500) -> pd.DataFrame | None:
+    def get_market_data(self, symbol: str, timeframe: str, limit: int = 500, is_startup_run: bool = False) -> pd.DataFrame | None:
         """
         Fetches historical OHLCV data for a given symbol and timeframe.
         """
@@ -33,6 +33,7 @@ class DataService:
 
         # The library also has specific constants for timeframes. We need a mapping.
         timeframe_map = {
+            '1m': Client.KLINE_INTERVAL_1MINUTE,
             '15m': Client.KLINE_INTERVAL_15MINUTE,
             '1h': Client.KLINE_INTERVAL_1HOUR,
             '4h': Client.KLINE_INTERVAL_4HOUR,
@@ -53,6 +54,12 @@ class DataService:
                 'close_time', 'quote_asset_volume', 'number_of_trades',
                 'taker_buy_base_asset_volume', 'taker_buy_quote_asset_volume', 'ignore'
             ])
+
+            if not is_startup_run:
+                df = df.iloc[:-1]
+                print("DataService: Scheduled run. Final (incomplete) candle removed.")
+            else:
+                print("DataService: Startup run. Using live, up-to-the-second data.")
 
             df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
             df.set_index('timestamp', inplace=True)

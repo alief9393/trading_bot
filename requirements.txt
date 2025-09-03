@@ -1,5 +1,5 @@
 # requirements.txt (The Final Correct Version)
-
+ccxt==4.5.2
 pandas==2.0.3
 pandas-ta
 python-binance

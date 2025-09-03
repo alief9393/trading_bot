@@ -14,9 +14,10 @@ from services.telegram_service import TelegramService
 from services.trade_logger import TradeLogger
 from services.trade_manager import TradeManagerService
 
-def run_trade_cycle_for_symbol(config, symbol: str):
+def run_trade_cycle_for_symbol(config, symbol: str, is_startup_run: bool = False):
     strategy_name = f"H4 Swing ({symbol})"
-    print(f"\n[{datetime.now()}] --- Running {strategy_name} Cycle ---")
+    run_type = "MANUAL STARTUP" if is_startup_run else "SCHEDULED"
+    print(f"\n[{datetime.now()}] --- Running {run_type} {strategy_name} Cycle ---")
     
     safe_symbol_name = symbol.replace('/', '_').lower()
     status_file = f"{safe_symbol_name}_status.json"
@@ -47,7 +48,7 @@ def run_trade_cycle_for_symbol(config, symbol: str):
     heuristic_svc = HeuristicService()
     trade_logger = TradeLogger(log_file)
     
-    market_df = data_svc.get_market_data(symbol=symbol, timeframe='4h')
+    market_df = data_svc.get_market_data(symbol=symbol, timeframe='4h', is_startup_run=is_startup_run)
     analysis_df = indicator_svc.add_all_indicators(market_df)
     prediction = ml_svc.get_prediction(analysis_df)
     result = heuristic_svc.generate_trade_signal(prediction, analysis_df)
@@ -84,7 +85,7 @@ if __name__ == '__main__':
     print("="*50)
     
     for symbol in symbols_to_trade:
-        run_trade_cycle_for_symbol(config, symbol)
+        run_trade_cycle_for_symbol(config, symbol, is_startup_run=True)
 
     print("\n" + "="*50)
     print("--- First manual cycle finished ---")
@@ -93,7 +94,6 @@ if __name__ == '__main__':
     print("\n--- Initializing Market-Aware Scheduler for all future cycles ---")
     scheduler = BlockingScheduler(timezone="UTC")
     
-    # Create a separate job for each symbol
     for symbol in symbols_to_trade:
         safe_symbol_name = symbol.replace('/', '_').lower()
         scheduler.add_job(
