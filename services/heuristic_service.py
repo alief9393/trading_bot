@@ -1,78 +1,90 @@
+# services/heuristic_service.py (The FINAL MTF Version)
+
 import pandas as pd
 
 class HeuristicService:
-    """
-    Service for applying validation rules, risk management, and generating
-    the final trade signal object (the "Glass Box" logic).
-    """
     def __init__(self):
-        print("HeuristicService: Initialized.")
+        print("HeuristicService: Initialized with MTF Logic.")
 
-    def generate_trade_signal(self, prediction: int, df: pd.DataFrame) -> dict:
+    def generate_h4_bias(self, prediction: int, df: pd.DataFrame) -> dict:
         """
-        Validates an AI prediction and, if valid, constructs a complete trade signal
-        with multiple Take Profit levels based on market volatility (ATR).
+        The "General": Analyzes the H4 chart to establish a strategic bias and a zone of interest.
         """
         if df is None or df.empty:
-            return {"status": "error", "reason": "No market data available."}
+            return {"status": "error"}
         
         if prediction == 0:
             return {"status": "hold"}
     
         latest_candle = df.iloc[-1]
-    
-        # --- Heuristic Validation Rules (Stays the same) ---
-        print("HeuristicService: Applying validation rules...")
-        if prediction == 1: # AI wants to BUY
-            if latest_candle['close'] < latest_candle['EMA_50']:
-                return {"status": "veto", "reason": "Price is below the 50-period EMA, suggesting bearish conditions."}
-        elif prediction == -1: # AI wants to SELL
-            if latest_candle['close'] > latest_candle['EMA_50']:
-                return {"status": "veto", "reason": "Price is above the 50-period EMA, suggesting bullish conditions."}
+        
+        if prediction == 1 and latest_candle['close'] < latest_candle['EMA_50']:
+            return {"status": "veto", "reason": "Bullish AI signal is below the H4 50 EMA."}
+        if prediction == -1 and latest_candle['close'] > latest_candle['EMA_50']:
+            return {"status": "veto", "reason": "Bearish AI signal is above the H4 50 EMA."}
 
-        # --- Risk Management Overlay (Stays the same) ---
-        print("HeuristicService: Applying risk management rules...")
+        # The bias is valid. Now, define the tactical plan.
         atr_value = latest_candle['ATRr_14']
-        max_allowable_atr = latest_candle['close'] * 0.05 
-        if atr_value > max_allowable_atr:
-            return {"status": "veto", "reason": f"Extreme market volatility detected (ATR is too high)."}
-    
-        # --- NEW: Dynamic TP/SL Calculation based on ATR ---
-        print("HeuristicService: All checks passed. Constructing signal with multiple TPs.")
+        pullback_level = latest_candle['EMA_21'] # The optimal entry is a pullback to the 21 EMA.
         
-        entry_price = latest_candle['close']
-        rationale = "Signal confirmed by market structure and momentum indicators."
-        
-        if prediction == 1: # BUY Signal
+        if prediction == 1:
             decision = "BUY"
-            # Stop Loss is set at 2x ATR below the entry
-            stop_loss = entry_price - (2 * atr_value)
-            # TP1 is set at 2x ATR above entry (1:1 Risk/Reward)
-            take_profit_1 = entry_price + (2 * atr_value)
-            # TP2 is set at 4x ATR above entry (1:2 Risk/Reward)
-            take_profit_2 = entry_price + (4 * atr_value)
-            # TP3 is set at 6x ATR above entry (1:3 Risk/Reward)
-            take_profit_3 = entry_price + (6 * atr_value)
-            
-        else: # SELL Signal
+            stop_loss = pullback_level - (2 * atr_value)
+            take_profit_1 = pullback_level + (2 * atr_value)
+            take_profit_2 = pullback_level + (4 * atr_value)
+            take_profit_3 = pullback_level + (6 * atr_value)
+        else: # SELL
             decision = "SELL"
-            # Stop Loss is set at 2x ATR above the entry
-            stop_loss = entry_price + (2 * atr_value)
-            # TP1 is set at 2x ATR below entry (1:1 Risk/Reward)
-            take_profit_1 = entry_price - (2 * atr_value)
-            # TP2 is set at 4x ATR below entry (1:2 Risk/Reward)
-            take_profit_2 = entry_price - (4 * atr_value)
-            # TP3 is set at 6x ATR below entry (1:3 Risk/Reward)
-            take_profit_3 = entry_price - (6 * atr_value)
+            stop_loss = pullback_level + (2 * atr_value)
+            take_profit_1 = pullback_level - (2 * atr_value)
+            take_profit_2 = pullback_level - (4 * atr_value)
+            take_profit_3 = pullback_level - (6 * atr_value)
 
-        trade_signal = {
-            "decision": decision,
-            "entry": round(entry_price, 2),
+        bias_details = {
+            "bias": decision,
+            "pullback_level": round(pullback_level, 2),
             "sl": round(stop_loss, 2),
             "tp1": round(take_profit_1, 2),
             "tp2": round(take_profit_2, 2),
             "tp3": round(take_profit_3, 2),
-            "rationale": rationale
+            "rationale": "H4 trend confirmed by AI. Awaiting H1 confirmation."
         }
     
-        return {"status": "success", "signal": trade_signal} 
+        return {"status": "success", "bias_details": bias_details}
+
+    def confirm_h1_entry(self, df: pd.DataFrame, bias: str) -> bool:
+        """
+        The "Scout": Analyzes the last closed H1 candle for a specific confirmation pattern.
+        """
+        if df is None or len(df) < 2:
+            return False # Need at least two candles for pattern recognition
+            
+        last_candle = df.iloc[-1]
+        
+        # Check for a Bullish Confirmation (if our bias is BUY)
+        if bias == "BUY":
+            # Bullish Engulfing Pattern
+            is_bullish_engulfing = (last_candle['close'] > last_candle['open'] and 
+                                    last_candle['open'] < df.iloc[-2]['close'] and 
+                                    last_candle['close'] > df.iloc[-2]['open'])
+            # Hammer Pattern (strong close at the top of the range)
+            is_hammer = (last_candle['close'] - last_candle['low']) / (last_candle['high'] - last_candle['low']) > 0.7
+
+            if is_bullish_engulfing or is_hammer:
+                print("HeuristicService (Scout): H1 Bullish entry pattern CONFIRMED.")
+                return True
+
+        # Check for a Bearish Confirmation (if our bias is SELL)
+        elif bias == "SELL":
+            # Bearish Engulfing Pattern
+            is_bearish_engulfing = (last_candle['close'] < last_candle['open'] and 
+                                    last_candle['open'] > df.iloc[-2]['close'] and 
+                                    last_candle['close'] < df.iloc[-2]['open'])
+            # Shooting Star Pattern (strong close at the bottom of the range)
+            is_shooting_star = (last_candle['high'] - last_candle['close']) / (last_candle['high'] - last_candle['low']) > 0.7
+
+            if is_bearish_engulfing or is_shooting_star:
+                print("HeuristicService (Scout): H1 Bearish entry pattern CONFIRMED.")
+                return True
+        
+        return False

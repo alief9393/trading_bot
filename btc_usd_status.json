@@ -1,4 +1,5 @@
 {
-  "is_trade_open": false,
-  "current_trade": {}
+  "state": "HUNTING",
+  "bias": null,
+  "trade_details": {}
 }
