@@ -1,5 +1,3 @@
-# services/indicator_service.py (The FINAL, Corrected Version to match the best model)
-
 import pandas as pd
 import pandas_ta as ta
 

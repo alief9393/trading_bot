@@ -1,4 +1,3 @@
-# services/trade_manager.py
 import pandas as pd
 import json
 
@@ -54,7 +53,6 @@ class TradeManagerService:
         message = f"🔔 **Trade Update ({self.symbol})** 🔔\n\nOur **{trade['decision']}** trade has hit **{outcome}** at `{exit_price}`!"
         
         try:
-            # We will use the simplified send_text_message method
             self.telegram_svc.send_text_message(message)
         except Exception as e:
             print(f"TradeManagerService: Failed to send Telegram update: {e}")

@@ -1,4 +1,3 @@
-# services/telegram_service.py (The FINAL MTF Version)
 import telegram
 import pandas as pd
 from datetime import datetime

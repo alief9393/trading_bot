@@ -1,5 +1,3 @@
-# trading_bot/services/heuristic_service.py (The FINAL, Definitive Version)
-
 import pandas as pd
 
 class HeuristicService:
@@ -21,9 +19,6 @@ class HeuristicService:
     
         print("HeuristicService: Received valid AI prediction. Generating tactical plan...")
         latest_candle = df.iloc[-1]
-        
-        # --- The simple EMA_50 Veto rule has been permanently removed ---
-        # We now fully trust the judgment of our highly-tuned AI models.
         
         atr_value = latest_candle['ATRr_14']
         pullback_level = latest_candle['EMA_21']

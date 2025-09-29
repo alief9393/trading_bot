@@ -1,5 +1,3 @@
-# services/trade_logger.py (The NEW Upgraded Version)
-
 import csv
 from datetime import datetime
 import os

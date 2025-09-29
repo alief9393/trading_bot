@@ -16,7 +16,6 @@ class DataService:
     def get_market_data(self, symbol: str, timeframe: str, limit: int = 500, is_startup_run: bool = False) -> pd.DataFrame | None:
         """
         Fetches a recent chunk of market data for LIVE analysis.
-        This version is now robust and uses a pagination loop to guarantee enough data.
         """
         if not self.exchange: return None
 
@@ -25,10 +24,7 @@ class DataService:
             
             if timeframe == '4h':
                 print(f"DataService (Live): '4h' requested. Fetching a robust chunk of 1h data...")
-                # --- THIS IS THE CRITICAL FIX: A PAGINATION LOOP FOR LIVE DATA ---
-                # We need at least 200 H4 candles, which is 800 hours. Let's fetch 1000 hours to be safe.
                 current_timestamp_ms = int(time.time() * 1000)
-                # We calculate the start time as 1000 hours ago in milliseconds.
                 since = current_timestamp_ms - (1000 * 60 * 60 * 1000)
                 all_ohlcv = []
                 
@@ -41,7 +37,6 @@ class DataService:
                     all_ohlcv.extend(ohlcv_chunk)
                     since = ohlcv_chunk[-1][0] + 1
                     
-                    # If we have fetched data up to the present, stop the loop
                     if since > self.exchange.milliseconds():
                         break
                     time.sleep(self.exchange.rateLimit / 1000)
@@ -57,7 +52,6 @@ class DataService:
                 print(f"DataService (Live): Fetched {len(df_1h)} total 1h candles. Resampling to 4H...")
                 agg_dict = {'open': 'first', 'high': 'max', 'low': 'min', 'close': 'last', 'volume': 'sum'}
                 df = df_1h.resample('4H', origin='start_day').agg(agg_dict)
-                # -------------------------------------------------------------------
                 
             else: # For other timeframes (like the 1m trade manager), fetch directly.
                 ohlcv = self.exchange.fetch_ohlcv(ccxt_symbol, timeframe, limit=limit)
@@ -79,8 +73,6 @@ class DataService:
             return None
 
     def get_all_historical_data(self, symbol: str, timeframe: str, start_date: str) -> pd.DataFrame | None:
-        # This function with the pagination loop is already correct and does not need changes.
-        # Ensure your version matches this logic.
         if not self.exchange: return None
 
         fetch_timeframe = '1h' if timeframe == '4h' else timeframe
