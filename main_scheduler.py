@@ -22,10 +22,11 @@ def run_h4_bias_check(config, symbol: str, data_svc, telegram_svc, is_startup_ru
     
     status_file = f"{symbol.replace('/', '_').lower()}_status.json"
     model_file = f"models/{symbol.replace('/', '_').lower()}_h4.pkl"
+    confidence_threshold = float(config['parameters']['confidence_threshold'])
 
     # Initialize services for this task
     indicator_svc = IndicatorService()
-    ml_svc = MLService(model_path=model_file)
+    ml_svc = MLService(model_path=model_file, confidence_threshold=confidence_threshold)
     heuristic_svc = HeuristicService()
     
     market_df_h4 = data_svc.get_market_data(symbol=symbol, timeframe='4h', is_startup_run=is_startup_run)

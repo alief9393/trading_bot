@@ -26,6 +26,12 @@ class TradeLogger:
 
     def log_new_signal(self, symbol: str, signal: dict):
         """Logs a new, open trade signal to the CSV file with multiple TPs."""
+        decision = signal.get('bias') 
+        entry = signal.get('entry')
+        sl = signal.get('sl')
+        tp1 = signal.get('tp1')
+        tp2 = signal.get('tp2')
+        tp3 = signal.get('tp3')
         with open(self.filename, 'a', newline='') as csvfile:
             writer = csv.writer(csvfile)
             # --- NEW LOGGING LOGIC ---

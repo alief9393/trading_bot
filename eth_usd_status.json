@@ -1,5 +1,12 @@
 {
-  "state": "HUNTING",
-  "bias": null,
-  "trade_details": {}
+  "state": "WATCHING_FOR_ENTRY",
+  "bias_details": {
+    "bias": "SELL",
+    "pullback_level": 4398.0,
+    "sl": 4522.56,
+    "tp1": 4273.45,
+    "tp2": 4148.89,
+    "tp3": 4024.34,
+    "rationale": "H4 bias confirmed by AI. Awaiting H1 confirmation."
+  }
 }
