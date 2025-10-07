@@ -34,11 +34,24 @@ def run_bot_cycle():
         exchange.proxies = {'http': None, 'https': None}
         symbol_input = 'BTC/USD'; ccxt_symbol = symbol_input.replace('/', '-')
 
-        ohlcv_h1 = exchange.fetch_ohlcv(ccxt_symbol, '1h', limit=1008)
-        df_h1 = pd.DataFrame(ohlcv_h1, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume']); df_h1['timestamp'] = pd.to_datetime(df_h1['timestamp'], unit='ms'); df_h1.set_index('timestamp', inplace=True)
+        # --- METODE FETCHING BARU YANG CEPAT & ANDAL ---
+        # Hitung timestamp untuk 100 hari terakhir (2400 jam)
+        since_timestamp = exchange.milliseconds() - (100 * 24 * 60 * 60 * 1000) 
+        
+        # Ambil data H1 dengan "mini loop"
+        all_ohlcv_h1 = []
+        while since_timestamp < exchange.milliseconds():
+            ohlcv_chunk = exchange.fetch_ohlcv(ccxt_symbol, '1h', since=since_timestamp, limit=300)
+            if not ohlcv_chunk: break
+            all_ohlcv_h1.extend(ohlcv_chunk)
+            since_timestamp = ohlcv_chunk[-1][0] + 1
+            time.sleep(exchange.rateLimit / 1000)
+        df_h1 = pd.DataFrame(all_ohlcv_h1, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume']); df_h1['timestamp'] = pd.to_datetime(df_h1['timestamp'], unit='ms'); df_h1.set_index('timestamp', inplace=True)
+        
         agg_dict = {'open': 'first', 'high': 'max', 'low': 'min', 'close': 'last', 'volume': 'sum'}
         df_h4 = df_h1.resample('4H', origin='start_day').agg(agg_dict).dropna()
 
+        # Ambil 1000 lilin M15 terakhir (ini sudah cukup dengan satu panggilan)
         ohlcv_m15 = exchange.fetch_ohlcv(ccxt_symbol, '15m', limit=1000)
         df_m15 = pd.DataFrame(ohlcv_m15, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume']); df_m15['timestamp'] = pd.to_datetime(df_m15['timestamp'], unit='ms')
         
@@ -72,8 +85,8 @@ def run_bot_cycle():
         h4_check = df_h4[df_h4.index < current_time]
         if h4_check.empty: raise ValueError("Not enough H4 data for trend check.")
 
-        # --- Logika Sinyal Pullback ---
-        pullback_found = False
+        signal_found = False
+
         is_uptrend = h4_check['close'].iloc[-1] > h4_check['EMA_55'].iloc[-1]
         h1_check = df_h1[df_h1.index < current_time]
         if not h1_check.empty:
@@ -94,7 +107,7 @@ def run_bot_cycle():
                                     stop_loss = entry_price - (2.0 * current_atr); take_profit = entry_price + (4.0 * current_atr)
                                     message = (f"PULLBACK BUY BTC/USD\n\nEntry: ${entry_price:,.2f}\nSL: ${stop_loss:,.2f}\nTP: ${take_profit:,.2f}")
                                     send_telegram_notification(message)
-                                    pullback_found = True
+                                    signal_found = True
             else:
                 last_highs = h1_check[h1_check['swing_high'].notna()]; last_lows = h1_check[h1_check['swing_low'].notna()]
                 if not last_highs.empty and not last_lows.empty:
@@ -112,10 +125,9 @@ def run_bot_cycle():
                                     stop_loss = entry_price + (2.0 * current_atr); take_profit = entry_price - (4.0 * current_atr)
                                     message = (f"PULLBACK SELL BTC/USD\n\nEntry: ${entry_price:,.2f}\nSL: ${stop_loss:,.2f}\nTP: ${take_profit:,.2f}")
                                     send_telegram_notification(message)
-                                    pullback_found = True
+                                    signal_found = True
         
-        # --- Logika Sinyal Momentum ---
-        if not pullback_found:
+        if not signal_found:
             strong_uptrend = h4_check['close'].iloc[-1] > h4_check['EMA_55'].iloc[-1] and h4_check['EMA_55'].iloc[-1] > h4_check['EMA_200'].iloc[-1]
             momentum_buy_trigger = latest_m15['EMA_9'] > latest_m15['EMA_21'] and previous_m15['EMA_9'] <= previous_m15['EMA_21']
             rsi_momentum_confirm = latest_m15['RSI_14'] > 60
@@ -125,6 +137,7 @@ def run_bot_cycle():
                 stop_loss = entry_price - (2.0 * current_atr); take_profit = entry_price + (4.0 * current_atr)
                 message = (f"MOMENTUM BUY BTC/USD\n\nEntry: ${entry_price:,.2f}\nSL: ${stop_loss:,.2f}\nTP: ${take_profit:,.2f}")
                 send_telegram_notification(message)
+                signal_found = True
 
             strong_downtrend = h4_check['close'].iloc[-1] < h4_check['EMA_55'].iloc[-1] and h4_check['EMA_55'].iloc[-1] < h4_check['EMA_200'].iloc[-1]
             momentum_sell_trigger = latest_m15['EMA_9'] < latest_m15['EMA_21'] and previous_m15['EMA_9'] >= previous_m15['EMA_21']
@@ -135,6 +148,10 @@ def run_bot_cycle():
                 stop_loss = entry_price + (2.0 * current_atr); take_profit = entry_price - (4.0 * current_atr)
                 message = (f"MOMENTUM SELL BTC/USD\n\nEntry: ${entry_price:,.2f}\nSL: ${stop_loss:,.2f}\nTP: ${take_profit:,.2f}")
                 send_telegram_notification(message)
+                signal_found = True
+
+        if not signal_found:
+            print("   No signal found in this cycle.")
 
     except Exception as e:
         print(f"   An error occurred during the cycle: {e}")
